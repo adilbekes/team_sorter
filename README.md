@@ -162,12 +162,12 @@ go run ./cmd/demo
 - `-d '<json>'`: Pass JSON as command-line string
 - `-f <file>`: Read JSON from file
 - `-o <file>`: Write JSON output to file (default: stdout)
-- `-all-name-solutions`: Output all optimal solutions as list items in the form `{ "Team N": ["Name", ...] }`
+- `-list`: Output all optimal solutions as list items in the form `{ "Team N": ["Name", ...] }`
 
 Example:
 
 ```bash
-./bin/sorter -f input.json -all-name-solutions | jq .
+./bin/sorter -f input.json -list | jq .
 ```
 
 If `solution_count` is `24`, this mode returns a JSON array with `24` objects.

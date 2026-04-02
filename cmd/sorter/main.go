@@ -66,7 +66,7 @@ func main() {
 	dataFlag := flag.String("d", "", "JSON request string")
 	fileFlag := flag.String("f", "", "JSON request file")
 	outputFlag := flag.String("o", "", "JSON output file (if not set, output to stdout)")
-	allNameSolutionsFlag := flag.Bool("all-name-solutions", false, "output all optimal solutions as [{\"Team N\": [\"Name\", ...]}, ...]")
+	listFlag := flag.Bool("list", false, "output all optimal solutions as [{\"Team N\": [\"Name\", ...]}, ...]")
 	flag.Parse()
 
 	var inputData io.Reader
@@ -98,7 +98,7 @@ func main() {
 	}
 
 	var payload interface{}
-	if *allNameSolutionsFlag {
+	if *listFlag {
 		solutions, err := teamsorter.ListOptimalNameSolutions(req)
 		if err != nil {
 			reportError(err.Error(), *outputFlag)
