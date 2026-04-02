@@ -278,3 +278,37 @@ func TestSortTeams_RejectsTeamCountLessThanTwo(t *testing.T) {
 		t.Fatalf("SortTeams() error = %v, want %v", err, ErrInvalidTeamCount)
 	}
 }
+
+func TestSortTeams_RejectsReservedPlaceholderNamePattern(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 2,
+		Participants: []Participant{
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "Placeholder 1", Ratings: oneRating(9.0)},
+			{Name: "Dana", Ratings: oneRating(8.0)},
+		},
+	}
+
+	_, err := SortTeams(req)
+	if err != ErrReservedPlaceholderName {
+		t.Fatalf("SortTeams() error = %v, want %v", err, ErrReservedPlaceholderName)
+	}
+}
+
+func TestSortTeams_AllowsNamesThatAreNotPlaceholderIntPattern(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 2,
+		Participants: []Participant{
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "Placeholder X", Ratings: oneRating(9.0)},
+			{Name: "Dana", Ratings: oneRating(8.0)},
+			{Name: "Mira", Ratings: oneRating(7.0)},
+		},
+	}
+
+	_, err := SortTeams(req)
+	if err != nil {
+		t.Fatalf("SortTeams() unexpected error = %v", err)
+	}
+}
+

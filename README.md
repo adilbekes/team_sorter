@@ -222,6 +222,7 @@ Common errors:
 - `"number_of_teams must be at least 2"`
 - `"participants must not be empty"`
 - `"participants count must be at least number_of_teams + 1"`
+- "participant name must not match reserved format Placeholder <int>"
 - `"participant rating must be between 1.0 and 10.0"`
 - `"all participants must have the same number of rating values"`
 - `"participant name must be unique"`

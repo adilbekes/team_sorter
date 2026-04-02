@@ -8,6 +8,7 @@ var (
 	ErrTooManyTeams             = errors.New("number_of_teams must be less than or equal to participants count")
 	ErrInsufficientParticipants = errors.New("participants count must be at least number_of_teams + 1")
 	ErrEmptyParticipantName     = errors.New("participant name must not be empty")
+	ErrReservedPlaceholderName  = errors.New("participant name must not match reserved format Placeholder <int>")
 	ErrInvalidParticipantRating = errors.New("participant rating must be between 1.0 and 10.0")
 	ErrInconsistentRatings      = errors.New("all participants must have ratings or all must have no ratings")
 	ErrInconsistentRatingCount  = errors.New("all participants must have the same number of rating values")

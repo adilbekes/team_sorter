@@ -2,8 +2,11 @@ package teamsorter
 
 import (
 	"math"
+	"regexp"
 	"strings"
 )
+
+var reservedPlaceholderNamePattern = regexp.MustCompile(`(?i)^placeholder\s+\d+$`)
 
 func ValidateSortTeamsRequest(req SortTeamsRequest) error {
 	if req.NumberOfTeams < 2 {
@@ -46,6 +49,10 @@ func ValidateSortTeamsRequest(req SortTeamsRequest) error {
 		name := strings.TrimSpace(participant.Name)
 		if name == "" {
 			return ErrEmptyParticipantName
+		}
+
+		if reservedPlaceholderNamePattern.MatchString(name) {
+			return ErrReservedPlaceholderName
 		}
 
 		if participant.HasRating() {
