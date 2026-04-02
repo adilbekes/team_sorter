@@ -38,21 +38,23 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-func writeError(msg string) {
-	_ = json.NewEncoder(os.Stdout).Encode(errorResponse{Error: msg})
-}
-
 func writeErrorToStderr(msg string) {
 	_ = json.NewEncoder(os.Stderr).Encode(errorResponse{Error: msg})
 }
 
-func writeErrorToFile(filename string, msg string) error {
+func writeErrorToFile(filename string, msg string) (err error) {
 	file, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	return json.NewEncoder(file).Encode(errorResponse{Error: msg})
+	defer func() {
+		if closeErr := file.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
+
+	err = json.NewEncoder(file).Encode(errorResponse{Error: msg})
+	return err
 }
 
 func reportError(msg string, outputFile string) {
@@ -85,7 +87,11 @@ func main() {
 			reportError(fmt.Sprintf("failed to open file: %s", err), *outputFlag)
 			os.Exit(1)
 		}
-		defer file.Close()
+		defer func() {
+			if closeErr := file.Close(); closeErr != nil {
+				writeErrorToStderr(fmt.Sprintf("failed to close input file: %s", closeErr))
+			}
+		}()
 		inputData = file
 	} else {
 		inputData = os.Stdin
@@ -121,10 +127,15 @@ func main() {
 			reportError(fmt.Sprintf("failed to create output file: %s", err), *outputFlag)
 			os.Exit(1)
 		}
-		defer file.Close()
 
 		if err := json.NewEncoder(file).Encode(payload); err != nil {
+			_ = file.Close()
 			reportError(fmt.Sprintf("failed to encode result: %s", err), *outputFlag)
+			os.Exit(1)
+		}
+
+		if err := file.Close(); err != nil {
+			reportError(fmt.Sprintf("failed to close output file: %s", err), *outputFlag)
 			os.Exit(1)
 		}
 	} else {

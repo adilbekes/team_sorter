@@ -2,6 +2,7 @@ package teamsorter
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 )
 
@@ -104,7 +105,7 @@ func TestSortTeams_RejectsInconsistentRatingListLength(t *testing.T) {
 	}
 
 	_, err := SortTeams(req)
-	if err != ErrInconsistentRatingCount {
+	if !errors.Is(err, ErrInconsistentRatingCount) {
 		t.Fatalf("SortTeams() error = %v, want %v", err, ErrInconsistentRatingCount)
 	}
 }
@@ -274,7 +275,7 @@ func TestSortTeams_RejectsTeamCountLessThanTwo(t *testing.T) {
 	}
 
 	_, err := SortTeams(req)
-	if err != ErrInvalidTeamCount {
+	if !errors.Is(err, ErrInvalidTeamCount) {
 		t.Fatalf("SortTeams() error = %v, want %v", err, ErrInvalidTeamCount)
 	}
 }
@@ -290,7 +291,7 @@ func TestSortTeams_RejectsReservedPlaceholderNamePattern(t *testing.T) {
 	}
 
 	_, err := SortTeams(req)
-	if err != ErrReservedPlaceholderName {
+	if !errors.Is(err, ErrReservedPlaceholderName) {
 		t.Fatalf("SortTeams() error = %v, want %v", err, ErrReservedPlaceholderName)
 	}
 }
@@ -311,4 +312,3 @@ func TestSortTeams_AllowsNamesThatAreNotPlaceholderIntPattern(t *testing.T) {
 		t.Fatalf("SortTeams() unexpected error = %v", err)
 	}
 }
-
