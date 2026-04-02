@@ -197,7 +197,8 @@ func TestListOptimalNameSolutions_CountMatchesKnownOptimalCount(t *testing.T) {
 		t.Fatalf("ListOptimalNameSolutions() error = %v", err)
 	}
 
-	if got, want := len(solutions), 12; got != want {
+	// 12 raw solutions, but duplicates from placeholder swaps reduce to 6 unique solutions
+	if got, want := len(solutions), 6; got != want {
 		t.Fatalf("solution length = %d, want %d", got, want)
 	}
 }

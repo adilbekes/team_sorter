@@ -158,6 +158,9 @@ func ListOptimalNameSolutions(req SortTeamsRequest) ([]map[string][]string, erro
 		return nil, ErrNoSolution
 	}
 
+	// Deduplicate solutions that differ only by placeholder swaps
+	allSolutions = deduplicateSolutions(allSolutions)
+
 	result := make([]map[string][]string, len(allSolutions))
 	for i, solution := range allSolutions {
 		item := make(map[string][]string, len(solution))
@@ -258,6 +261,7 @@ func fillTeamsOptimally(participants []Participant, teams []Team, capacities []i
 	solutionCount := 0
 	bestTeams := make([]Team, len(teams))
 	allBestTeams := make([][]Team, 0)
+	seenOptimalSignatures := make(map[string]struct{})
 	teamPlaceholders := make([]int, len(teams))
 	teamRealMembers := make([]int, len(teams))
 
@@ -291,6 +295,7 @@ func fillTeamsOptimally(participants []Participant, teams []Team, capacities []i
 			}
 
 			objective := computeOptimizationObjective(teams)
+			signature := solutionSignature(teams)
 
 			if !bestFound || objectiveBetter(objective, bestObjective, eps) {
 				// Strictly better solution — reset
@@ -302,8 +307,14 @@ func fillTeamsOptimally(participants []Participant, teams []Team, capacities []i
 				}
 				bestFound = true
 				solutionCount = 1
+				seenOptimalSignatures = map[string]struct{}{signature: {}}
 			} else if objectiveEqual(objective, bestObjective, eps) {
-				// Equally optimal solution — reservoir sampling
+				if _, exists := seenOptimalSignatures[signature]; exists {
+					return
+				}
+				seenOptimalSignatures[signature] = struct{}{}
+
+				// New unique equally optimal solution — reservoir sampling on unique set
 				solutionCount++
 				current := cloneTeams(teams)
 				if collectAll {
@@ -377,6 +388,49 @@ func fillTeamsOptimally(participants []Participant, teams []Team, capacities []i
 	}
 
 	return true, solutionCount, allBestTeams
+}
+
+// solutionSignature creates a canonical string representation of a solution
+// that treats placeholders with the same rating as interchangeable.
+func solutionSignature(teams []Team) string {
+	var parts []string
+	for _, team := range teams {
+		// Sort members by name for canonical ordering
+		members := make([]Participant, len(team.Members))
+		copy(members, team.Members)
+		sort.Slice(members, func(i, j int) bool {
+			return members[i].Name < members[j].Name
+		})
+
+		// Build signature, ignoring placeholder-specific names
+		var memberSigs []string
+		for _, m := range members {
+			if m.IsPlaceholder {
+				// Treat all placeholders with same rating as identical
+				memberSigs = append(memberSigs, fmt.Sprintf("PH:%.1f", m.Score().Float64()))
+			} else {
+				memberSigs = append(memberSigs, m.Name)
+			}
+		}
+		parts = append(parts, fmt.Sprintf("%s:[%s]", team.Name, strings.Join(memberSigs, ",")))
+	}
+	return strings.Join(parts, "|")
+}
+
+// deduplicateSolutions removes solutions that differ only by placeholder swaps
+func deduplicateSolutions(allTeams [][]Team) [][]Team {
+	seen := make(map[string]bool)
+	var result [][]Team
+
+	for _, teams := range allTeams {
+		sig := solutionSignature(teams)
+		if !seen[sig] {
+			seen[sig] = true
+			result = append(result, teams)
+		}
+	}
+
+	return result
 }
 
 type optimizationObjective struct {
