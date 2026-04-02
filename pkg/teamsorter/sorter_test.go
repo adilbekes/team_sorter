@@ -236,3 +236,30 @@ func TestListOptimalNameSolutions_Format(t *testing.T) {
 	}
 }
 
+func TestSortTeams_MultiRatingBalancesRolesAndTotal(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 2,
+		Participants: []Participant{
+			{Name: "A", Ratings: []Rating{10.0, 1.0, 5.5}},
+			{Name: "B", Ratings: []Rating{1.0, 10.0, 5.5}},
+			{Name: "C", Ratings: []Rating{10.0, 1.0, 5.5}},
+			{Name: "D", Ratings: []Rating{1.0, 10.0, 5.5}},
+		},
+	}
+
+	resp, err := SortTeams(req)
+	if err != nil {
+		t.Fatalf("SortTeams() error = %v", err)
+	}
+
+	if got, want := len(resp.Meta.RatingDiff.Values), 4; got != want {
+		t.Fatalf("rating_diff length = %d, want %d", got, want)
+	}
+
+	for i, diff := range resp.Meta.RatingDiff.Values {
+		if diff != 0 {
+			t.Fatalf("rating_diff[%d] = %.1f, want 0.0", i, diff)
+		}
+	}
+}
+

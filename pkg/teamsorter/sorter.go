@@ -254,7 +254,7 @@ func fillTeamsOptimally(participants []Participant, teams []Team, capacities []i
 	const eps = 1e-9
 
 	bestFound := false
-	bestDiff := Rating(math.MaxFloat64)
+	bestObjective := optimizationObjective{MaxDiff: Rating(math.MaxFloat64)}
 	solutionCount := 0
 	bestTeams := make([]Team, len(teams))
 	allBestTeams := make([][]Team, 0)
@@ -271,20 +271,6 @@ func fillTeamsOptimally(participants []Participant, teams []Team, capacities []i
 			}
 		}
 		return cloned
-	}
-
-	minMax := func(current []Team) (Rating, Rating) {
-		minRating := current[0].TotalRating
-		maxRating := current[0].TotalRating
-		for _, t := range current[1:] {
-			if t.TotalRating < minRating {
-				minRating = t.TotalRating
-			}
-			if t.TotalRating > maxRating {
-				maxRating = t.TotalRating
-			}
-		}
-		return minRating, maxRating
 	}
 
 	hasAtLeastOneRealMember := func() bool {
@@ -304,13 +290,11 @@ func fillTeamsOptimally(participants []Participant, teams []Team, capacities []i
 				return
 			}
 
-			_, maxRating := minMax(teams)
-			minRating, _ := minMax(teams)
-			diff := normalizeRating(float64(maxRating - minRating))
+			objective := computeOptimizationObjective(teams)
 
-			if !bestFound || float64(diff) < float64(bestDiff)-eps {
+			if !bestFound || objectiveBetter(objective, bestObjective, eps) {
 				// Strictly better solution — reset
-				bestDiff = diff
+				bestObjective = objective
 				current := cloneTeams(teams)
 				bestTeams = current
 				if collectAll {
@@ -318,7 +302,7 @@ func fillTeamsOptimally(participants []Participant, teams []Team, capacities []i
 				}
 				bestFound = true
 				solutionCount = 1
-			} else if math.Abs(float64(diff-bestDiff)) <= eps {
+			} else if objectiveEqual(objective, bestObjective, eps) {
 				// Equally optimal solution — reservoir sampling
 				solutionCount++
 				current := cloneTeams(teams)
@@ -393,6 +377,130 @@ func fillTeamsOptimally(participants []Participant, teams []Team, capacities []i
 	}
 
 	return true, solutionCount, allBestTeams
+}
+
+type optimizationObjective struct {
+	MaxDiff   Rating
+	TotalDiff Rating
+	SumDiff   Rating
+	Diffs     []Rating
+}
+
+func computeOptimizationObjective(teams []Team) optimizationObjective {
+	diffs := optimizationDiffs(teams)
+	obj := optimizationObjective{Diffs: diffs}
+	if len(diffs) == 0 {
+		return obj
+	}
+
+	maxDiff := diffs[0]
+	sum := 0.0
+	for _, d := range diffs {
+		if d > maxDiff {
+			maxDiff = d
+		}
+		sum += d.Float64()
+	}
+
+	obj.MaxDiff = normalizeRating(maxDiff.Float64())
+	obj.TotalDiff = normalizeRating(diffs[len(diffs)-1].Float64())
+	obj.SumDiff = normalizeRating(sum)
+	return obj
+}
+
+func optimizationDiffs(teams []Team) []Rating {
+	if len(teams) == 0 {
+		return []Rating{0}
+	}
+
+	metricCount := teamMetricCount(teams[0])
+	minValues := make([]Rating, metricCount)
+	maxValues := make([]Rating, metricCount)
+	first := teamMetrics(teams[0])
+	copy(minValues, first)
+	copy(maxValues, first)
+
+	for _, team := range teams[1:] {
+		metrics := teamMetrics(team)
+		for i := 0; i < metricCount; i++ {
+			if metrics[i] < minValues[i] {
+				minValues[i] = metrics[i]
+			}
+			if metrics[i] > maxValues[i] {
+				maxValues[i] = metrics[i]
+			}
+		}
+	}
+
+	diffs := make([]Rating, metricCount)
+	for i := 0; i < metricCount; i++ {
+		diffs[i] = normalizeRating(maxValues[i].Float64() - minValues[i].Float64())
+	}
+
+	// Single-rating case has [criterion,total] where criterion == total; optimize by total only.
+	if metricCount == 2 {
+		return []Rating{diffs[1]}
+	}
+
+	return diffs
+}
+
+func objectiveBetter(a optimizationObjective, b optimizationObjective, eps float64) bool {
+	if float64(a.MaxDiff) < float64(b.MaxDiff)-eps {
+		return true
+	}
+	if math.Abs(float64(a.MaxDiff-b.MaxDiff)) > eps {
+		return false
+	}
+
+	if float64(a.TotalDiff) < float64(b.TotalDiff)-eps {
+		return true
+	}
+	if math.Abs(float64(a.TotalDiff-b.TotalDiff)) > eps {
+		return false
+	}
+
+	if float64(a.SumDiff) < float64(b.SumDiff)-eps {
+		return true
+	}
+	if math.Abs(float64(a.SumDiff-b.SumDiff)) > eps {
+		return false
+	}
+
+	for i := range a.Diffs {
+		if i >= len(b.Diffs) {
+			return false
+		}
+		if float64(a.Diffs[i]) < float64(b.Diffs[i])-eps {
+			return true
+		}
+		if math.Abs(float64(a.Diffs[i]-b.Diffs[i])) > eps {
+			return false
+		}
+	}
+
+	return false
+}
+
+func objectiveEqual(a optimizationObjective, b optimizationObjective, eps float64) bool {
+	if len(a.Diffs) != len(b.Diffs) {
+		return false
+	}
+	if math.Abs(float64(a.MaxDiff-b.MaxDiff)) > eps {
+		return false
+	}
+	if math.Abs(float64(a.TotalDiff-b.TotalDiff)) > eps {
+		return false
+	}
+	if math.Abs(float64(a.SumDiff-b.SumDiff)) > eps {
+		return false
+	}
+	for i := range a.Diffs {
+		if math.Abs(float64(a.Diffs[i]-b.Diffs[i])) > eps {
+			return false
+		}
+	}
+	return true
 }
 
 func buildSortTeamsMeta(teams []Team, participantCount int, placeholderCount int, solutionCount int) *SortTeamsMeta {

@@ -35,6 +35,7 @@ The sorter uses **exact backtracking with pruning** to guarantee the globally op
    - Equal team sizes (or size + 1 for first `remainder` teams)
    - Placeholder cap per team: `ceil(placeholder_count / team_count)`
    - Each team must include ≥ 1 real participant
+   - Multi-rating objective: balances per-criterion team spreads (e.g., attack/mid/defense) and total team spread together
 3. **Solution counting**: Tracks all distinct assignments that achieve the minimum `rating_diff`
 4. **Random selection**: Uses reservoir sampling to randomly pick one among all optimal solutions
 
