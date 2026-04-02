@@ -6,7 +6,7 @@ import (
 )
 
 func ValidateSortTeamsRequest(req SortTeamsRequest) error {
-	if req.NumberOfTeams <= 0 {
+	if req.NumberOfTeams < 2 {
 		return ErrInvalidTeamCount
 	}
 

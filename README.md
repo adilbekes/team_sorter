@@ -16,7 +16,7 @@ Team Sorter divides participants into balanced teams based on ratings, achieving
 
 Input must satisfy:
 
-- `number_of_teams` > 0
+- `number_of_teams` >= 2
 - `participants` is not empty
 - Number of participants ≥ `number_of_teams` + 1 (minimum 2 real participants per configuration)
 - Each participant:
@@ -219,7 +219,7 @@ All validation errors return JSON with an `error` field:
 ```
 
 Common errors:
-- `"number_of_teams must be greater than 0"`
+- `"number_of_teams must be at least 2"`
 - `"participants must not be empty"`
 - `"participants count must be at least number_of_teams + 1"`
 - `"participant rating must be between 1.0 and 10.0"`

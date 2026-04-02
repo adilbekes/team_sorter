@@ -3,7 +3,7 @@ package teamsorter
 import "errors"
 
 var (
-	ErrInvalidTeamCount         = errors.New("number_of_teams must be greater than 0")
+	ErrInvalidTeamCount         = errors.New("number_of_teams must be at least 2")
 	ErrInvalidParticipants      = errors.New("participants must not be empty")
 	ErrTooManyTeams             = errors.New("number_of_teams must be less than or equal to participants count")
 	ErrInsufficientParticipants = errors.New("participants count must be at least number_of_teams + 1")

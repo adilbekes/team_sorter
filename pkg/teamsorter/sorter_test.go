@@ -264,3 +264,17 @@ func TestSortTeams_MultiRatingBalancesRolesAndTotal(t *testing.T) {
 	}
 }
 
+func TestSortTeams_RejectsTeamCountLessThanTwo(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 1,
+		Participants: []Participant{
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "Mira", Ratings: oneRating(9.0)},
+		},
+	}
+
+	_, err := SortTeams(req)
+	if err != ErrInvalidTeamCount {
+		t.Fatalf("SortTeams() error = %v, want %v", err, ErrInvalidTeamCount)
+	}
+}

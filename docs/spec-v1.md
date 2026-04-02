@@ -8,7 +8,7 @@
     - Rating
 
 ## Validation
-- Number of teams must be > 0
+- Number of teams must be >= 2
 - Participants must not be empty
 - Number of teams must be <= number of participants
 - Each participant:
