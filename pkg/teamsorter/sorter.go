@@ -238,7 +238,7 @@ func medianRatings(participants []Participant) []Rating {
 	for d := 0; d < dimensions; d++ {
 		ratings := make([]float64, len(participants))
 		for i, participant := range participants {
-			ratings[i] = participant.Ratings[d].Float64()
+			ratings[i] = float64(participant.Ratings[d])
 		}
 		sort.Float64s(ratings)
 
@@ -407,7 +407,7 @@ func solutionSignature(teams []Team) string {
 		for _, m := range members {
 			if m.IsPlaceholder {
 				// Treat all placeholders with same rating as identical
-				memberSigs = append(memberSigs, fmt.Sprintf("PH:%.1f", m.Score().Float64()))
+				memberSigs = append(memberSigs, fmt.Sprintf("PH:%.1f", float64(m.Score())))
 			} else {
 				memberSigs = append(memberSigs, m.Name)
 			}
@@ -453,11 +453,11 @@ func computeOptimizationObjective(teams []Team) optimizationObjective {
 		if d > maxDiff {
 			maxDiff = d
 		}
-		sum += d.Float64()
+		sum += float64(d)
 	}
 
-	obj.MaxDiff = normalizeRating(maxDiff.Float64())
-	obj.AvgDiff = normalizeRating(diffs[len(diffs)-1].Float64())
+	obj.MaxDiff = normalizeRating(float64(maxDiff))
+	obj.AvgDiff = normalizeRating(float64(diffs[len(diffs)-1]))
 	obj.SumDiff = normalizeRating(sum)
 	return obj
 }
@@ -488,7 +488,7 @@ func optimizationDiffs(teams []Team) []Rating {
 
 	diffs := make([]Rating, metricCount)
 	for i := 0; i < metricCount; i++ {
-		diffs[i] = normalizeRating(maxValues[i].Float64() - minValues[i].Float64())
+		diffs[i] = normalizeRating(float64(maxValues[i]) - float64(minValues[i]))
 	}
 
 	// Single-rating case has [criterion,avg] where criterion == avg; optimize by avg only.
@@ -592,9 +592,9 @@ func buildSortTeamsMeta(teams []Team, participantCount int, placeholderCount int
 
 	diffValues := make([]Rating, metricCount)
 	for i := 0; i < metricCount; i++ {
-		minValues[i] = normalizeRating(minValues[i].Float64())
-		maxValues[i] = normalizeRating(maxValues[i].Float64())
-		diffValues[i] = normalizeRating(maxValues[i].Float64() - minValues[i].Float64())
+		minValues[i] = normalizeRating(float64(minValues[i]))
+		maxValues[i] = normalizeRating(float64(maxValues[i]))
+		diffValues[i] = normalizeRating(float64(maxValues[i]) - float64(minValues[i]))
 	}
 
 	if metricCount == 2 {
@@ -635,7 +635,7 @@ func teamMetrics(team Team) []Rating {
 
 	for _, member := range team.Members {
 		for i, rating := range member.Ratings {
-			metrics[i] = normalizeRating(metrics[i].Float64() + rating.Float64())
+			metrics[i] = normalizeRating(float64(metrics[i]) + float64(rating))
 		}
 	}
 

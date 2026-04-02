@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 	"team_sorter/pkg/teamsorter"
 )
 
@@ -23,7 +24,11 @@ func main() {
 		},
 	}
 
-	fmt.Printf("Participants: %s\n", teamsorter.FormatItems(req.Participants))
+	parts := make([]string, len(req.Participants))
+	for i := range req.Participants {
+		parts[i] = req.Participants[i].String()
+	}
+	fmt.Printf("Participants: %s\n", strings.Join(parts, ", "))
 	fmt.Printf("Number of teams: %d\n\n", req.NumberOfTeams)
 
 	result, err := teamsorter.SortTeams(req)

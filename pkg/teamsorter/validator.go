@@ -61,7 +61,7 @@ func ValidateSortTeamsRequest(req SortTeamsRequest) error {
 			}
 
 			for _, value := range participant.Ratings {
-				rating := value.Float64()
+				rating := float64(value)
 				if math.IsNaN(rating) || math.IsInf(rating, 0) {
 					return ErrInvalidParticipantRating
 				}

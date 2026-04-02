@@ -13,12 +13,11 @@ func normalizeRating(v float64) Rating {
 	return Rating(math.Round(v*10) / 10)
 }
 
-func (r Rating) Float64() float64 {
-	return float64(r)
-}
-
-func (r Rating) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("%.1f", r)), nil
+func (r *Rating) MarshalJSON() ([]byte, error) {
+	if r == nil {
+		return []byte("0.0"), nil
+	}
+	return []byte(fmt.Sprintf("%.1f", *r)), nil
 }
 
 func (r *Rating) UnmarshalJSON(data []byte) error {
@@ -36,7 +35,10 @@ type Participant struct {
 	IsPlaceholder bool     `json:"is_placeholder,omitempty"`
 }
 
-func (p Participant) String() string {
+func (p *Participant) String() string {
+	if p == nil {
+		return ""
+	}
 	if len(p.Ratings) == 0 {
 		return p.Name
 	}
@@ -50,28 +52,40 @@ func (p Participant) String() string {
 	return fmt.Sprintf("%s([%s])", p.Name, strings.Join(parts, ","))
 }
 
-func (p Participant) HasRating() bool {
+func (p *Participant) HasRating() bool {
+	if p == nil {
+		return false
+	}
 	return len(p.Ratings) > 0
 }
 
-func (p Participant) RatingCount() int {
+func (p *Participant) RatingCount() int {
+	if p == nil {
+		return 0
+	}
 	return len(p.Ratings)
 }
 
-func (p Participant) Score() Rating {
+func (p *Participant) Score() Rating {
+	if p == nil {
+		return 0
+	}
 	if len(p.Ratings) == 0 {
 		return 0
 	}
 
 	total := 0.0
 	for _, rating := range p.Ratings {
-		total += rating.Float64()
+		total += float64(rating)
 	}
 
 	return normalizeRating(total / float64(len(p.Ratings)))
 }
 
-func (p Participant) MarshalJSON() ([]byte, error) {
+func (p *Participant) MarshalJSON() ([]byte, error) {
+	if p == nil {
+		return []byte("null"), nil
+	}
 	type participantJSON struct {
 		Name          string      `json:"name"`
 		Rating        interface{} `json:"rating,omitempty"`
@@ -158,11 +172,15 @@ func (m MetaRating) MarshalJSON() ([]byte, error) {
 }
 
 func (t Team) String() string {
+	memberNames := make([]string, len(t.Members))
+	for i := range t.Members {
+		memberNames[i] = t.Members[i].String()
+	}
 	return fmt.Sprintf(
 		"%s | Total: %.1f | Members: [%s]",
 		t.Name,
 		t.TotalRating,
-		FormatItems(t.Members),
+		strings.Join(memberNames, ", "),
 	)
 }
 
