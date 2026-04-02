@@ -6,21 +6,20 @@ import (
 	"team_sorter/pkg/teamsorter"
 )
 
-func ptrRating(r float64) *teamsorter.Rating {
-	rating := teamsorter.Rating(r)
-	return &rating
+func oneRating(r float64) []teamsorter.Rating {
+	return []teamsorter.Rating{teamsorter.Rating(r)}
 }
 
 func main() {
 	req := teamsorter.SortTeamsRequest{
 		NumberOfTeams: 3,
 		Participants: []teamsorter.Participant{
-			{Name: "Ali", Rating: ptrRating(10.0)},
-			{Name: "Mira", Rating: ptrRating(9.0)},
-			{Name: "Bek", Rating: ptrRating(8.0)},
-			{Name: "Dana", Rating: ptrRating(7.0)},
-			{Name: "Nurlan", Rating: ptrRating(6.0)},
-			{Name: "Aruzhan", Rating: ptrRating(5.0)},
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "Mira", Ratings: oneRating(9.0)},
+			{Name: "Bek", Ratings: oneRating(8.0)},
+			{Name: "Dana", Ratings: oneRating(7.0)},
+			{Name: "Nurlan", Ratings: oneRating(6.0)},
+			{Name: "Aruzhan", Ratings: oneRating(5.0)},
 		},
 	}
 

@@ -1,24 +1,26 @@
 package teamsorter
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
-func ptrRating(r float64) *Rating {
-	rating := Rating(r)
-	return &rating
+func oneRating(r float64) []Rating {
+	return []Rating{Rating(r)}
 }
 
 func TestSortTeams_AddsMedianPlaceholderWhenNotDivisible(t *testing.T) {
 	req := SortTeamsRequest{
 		NumberOfTeams: 3,
 		Participants: []Participant{
-			{Name: "Ali", Rating: ptrRating(10.0)},
-			{Name: "Mira", Rating: ptrRating(9.0)},
-			{Name: "Bek", Rating: ptrRating(8.0)},
-			{Name: "Dana", Rating: ptrRating(7.0)},
-			{Name: "Nurlan", Rating: ptrRating(6.0)},
-			{Name: "Aruzhan", Rating: ptrRating(5.0)},
-			{Name: "Timur", Rating: ptrRating(4.0)},
-			{Name: "Aida", Rating: ptrRating(3.0)},
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "Mira", Ratings: oneRating(9.0)},
+			{Name: "Bek", Ratings: oneRating(8.0)},
+			{Name: "Dana", Ratings: oneRating(7.0)},
+			{Name: "Nurlan", Ratings: oneRating(6.0)},
+			{Name: "Aruzhan", Ratings: oneRating(5.0)},
+			{Name: "Timur", Ratings: oneRating(4.0)},
+			{Name: "Aida", Ratings: oneRating(3.0)},
 		},
 	}
 
@@ -44,8 +46,8 @@ func TestSortTeams_AddsMedianPlaceholderWhenNotDivisible(t *testing.T) {
 			if len(member.Name) >= 11 && member.Name[:11] == "Placeholder" {
 				placeholderCount++
 				want := Rating(6.5)
-				if *member.Rating != want {
-					t.Fatalf("placeholder rating = %.1f, want %.1f", *member.Rating, want)
+				if len(member.Ratings) != 1 || member.Ratings[0] != want {
+					t.Fatalf("placeholder rating = %v, want %.1f", member.Ratings, want)
 				}
 			}
 		}
@@ -60,12 +62,12 @@ func TestSortTeams_DoesNotAddPlaceholderWhenDivisible(t *testing.T) {
 	req := SortTeamsRequest{
 		NumberOfTeams: 3,
 		Participants: []Participant{
-			{Name: "Ali", Rating: ptrRating(10.0)},
-			{Name: "Mira", Rating: ptrRating(9.0)},
-			{Name: "Bek", Rating: ptrRating(8.0)},
-			{Name: "Dana", Rating: ptrRating(7.0)},
-			{Name: "Nurlan", Rating: ptrRating(6.0)},
-			{Name: "Aruzhan", Rating: ptrRating(5.0)},
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "Mira", Ratings: oneRating(9.0)},
+			{Name: "Bek", Ratings: oneRating(8.0)},
+			{Name: "Dana", Ratings: oneRating(7.0)},
+			{Name: "Nurlan", Ratings: oneRating(6.0)},
+			{Name: "Aruzhan", Ratings: oneRating(5.0)},
 		},
 	}
 
@@ -89,3 +91,148 @@ func TestSortTeams_DoesNotAddPlaceholderWhenDivisible(t *testing.T) {
 		}
 	}
 }
+
+func TestSortTeams_RejectsInconsistentRatingListLength(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 2,
+		Participants: []Participant{
+			{Name: "Ali", Ratings: []Rating{10.0, 9.0, 8.0}},
+			{Name: "Mira", Ratings: []Rating{9.0, 8.0}},
+			{Name: "Bek", Ratings: []Rating{8.0, 7.0, 6.0}},
+			{Name: "Dana", Ratings: []Rating{7.0, 6.0, 5.0}},
+		},
+	}
+
+	_, err := SortTeams(req)
+	if err != ErrInconsistentRatingCount {
+		t.Fatalf("SortTeams() error = %v, want %v", err, ErrInconsistentRatingCount)
+	}
+}
+
+func TestSortTeams_MetaRatingsAreListForMultiRatingInput(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 2,
+		Participants: []Participant{
+			{Name: "Bek", Ratings: []Rating{10.0, 7.0, 5.0}},
+			{Name: "Ali", Ratings: []Rating{9.0, 6.0, 5.0}},
+			{Name: "Mira", Ratings: []Rating{8.0, 7.0, 6.0}},
+			{Name: "Dana", Ratings: []Rating{7.0, 8.0, 5.0}},
+		},
+	}
+
+	resp, err := SortTeams(req)
+	if err != nil {
+		t.Fatalf("SortTeams() error = %v", err)
+	}
+
+	bytes, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(bytes, &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+
+	meta := payload["meta"].(map[string]any)
+	for _, field := range []string{"min_team_rating", "max_team_rating", "rating_diff"} {
+		values, ok := meta[field].([]any)
+		if !ok {
+			t.Fatalf("%s should be a list for multi-rating input", field)
+		}
+		if got, want := len(values), 4; got != want {
+			t.Fatalf("%s length = %d, want %d", field, got, want)
+		}
+	}
+}
+
+func TestSortTeams_MetaRatingsStayScalarForSingleRatingInput(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 2,
+		Participants: []Participant{
+			{Name: "Bek", Ratings: []Rating{10.0}},
+			{Name: "Ali", Ratings: []Rating{9.0}},
+			{Name: "Mira", Ratings: []Rating{8.0}},
+			{Name: "Dana", Ratings: []Rating{7.0}},
+		},
+	}
+
+	resp, err := SortTeams(req)
+	if err != nil {
+		t.Fatalf("SortTeams() error = %v", err)
+	}
+
+	bytes, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(bytes, &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+
+	meta := payload["meta"].(map[string]any)
+	for _, field := range []string{"min_team_rating", "max_team_rating", "rating_diff"} {
+		if _, ok := meta[field].([]any); ok {
+			t.Fatalf("%s should remain scalar for single-rating input", field)
+		}
+	}
+}
+
+func TestListOptimalNameSolutions_CountMatchesKnownOptimalCount(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 3,
+		Participants: []Participant{
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "Mira", Ratings: oneRating(10.0)},
+			{Name: "Bek", Ratings: oneRating(10.0)},
+			{Name: "Dana", Ratings: oneRating(9.0)},
+		},
+	}
+
+	solutions, err := ListOptimalNameSolutions(req)
+	if err != nil {
+		t.Fatalf("ListOptimalNameSolutions() error = %v", err)
+	}
+
+	if got, want := len(solutions), 12; got != want {
+		t.Fatalf("solution length = %d, want %d", got, want)
+	}
+}
+
+func TestListOptimalNameSolutions_Format(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 2,
+		Participants: []Participant{
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "Mira", Ratings: oneRating(9.0)},
+			{Name: "Bek", Ratings: oneRating(8.0)},
+			{Name: "Dana", Ratings: oneRating(7.0)},
+		},
+	}
+
+	solutions, err := ListOptimalNameSolutions(req)
+	if err != nil {
+		t.Fatalf("ListOptimalNameSolutions() error = %v", err)
+	}
+	if len(solutions) == 0 {
+		t.Fatalf("expected at least one solution")
+	}
+
+	first := solutions[0]
+	if len(first) != 2 {
+		t.Fatalf("solution team count = %d, want 2", len(first))
+	}
+
+	for teamName, members := range first {
+		if teamName == "" {
+			t.Fatalf("team name must not be empty")
+		}
+		if len(members) != 2 {
+			t.Fatalf("members in %s = %d, want 2", teamName, len(members))
+		}
+	}
+}
+

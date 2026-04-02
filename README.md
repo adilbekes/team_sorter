@@ -5,7 +5,7 @@ Team Sorter divides participants into balanced teams based on ratings, achieving
 ## Features
 
 - **Optimal balancing**: Uses exact branch-and-bound backtracking algorithm to find the global minimum rating difference across teams
-- **Decimal ratings**: Supports participant ratings as decimals (1.0 to 10.0) with one-decimal precision
+- **Flexible ratings**: Supports participant `rating` as either a decimal or a list of decimals (1.0 to 10.0) with one-decimal precision
 - **Placeholder padding**: Automatically adds median-rated placeholder participants when participant count is not divisible by team count
 - **Equal team sizes**: Maintains equal team sizes; each team must have at least 1 real (non-placeholder) participant
 - **Solution enumeration**: Counts all optimal solutions and randomly selects one per run via reservoir sampling
@@ -22,7 +22,9 @@ Input must satisfy:
 - Each participant:
   - Has a unique name (case-insensitive)
   - Name is not empty
-  - Rating is in range [1.0, 10.0] (finite, not NaN/Inf)
+  - Rating value(s) are in range [1.0, 10.0] (finite, not NaN/Inf)
+- Ratings are all-or-none: either all participants have ratings, or none have ratings
+- If `rating` is a list for one participant, all participants must provide the same list length
 
 ## Algorithm
 
@@ -42,10 +44,10 @@ The sorter uses **exact backtracking with pruning** to guarantee the globally op
 {
   "number_of_teams": 3,
   "participants": [
-    {"name": "Alice", "rating": 9.5},
-    {"name": "Bob", "rating": 8.0},
-    {"name": "Charlie", "rating": 7.5},
-    {"name": "Diana", "rating": 10.0}
+    {"name": "Alice", "rating": [9.5, 8.0, 7.5]},
+    {"name": "Bob", "rating": [8.0, 8.5, 7.0]},
+    {"name": "Charlie", "rating": [7.5, 7.0, 8.0]},
+    {"name": "Diana", "rating": [10.0, 9.0, 8.5]}
   ]
 }
 ```
@@ -54,7 +56,9 @@ The sorter uses **exact backtracking with pruning** to guarantee the globally op
 - `number_of_teams` (int): Number of teams to create
 - `participants` (array):
   - `name` (string): Unique participant identifier
-  - `rating` (number): Skill/strength rating in range [1.0, 10.0]
+  - `rating` (number or number[]): Skill/strength rating value(s) in range [1.0, 10.0]
+    - Number keeps single-rating behavior
+    - List enables multi-criteria input; balancing uses the participant's average rating
 
 ## Output Format
 
@@ -95,9 +99,14 @@ The sorter uses **exact backtracking with pruning** to guarantee the globally op
 - `placeholder_count`: Number of auto-added placeholder participants
 - `members_per_team`: Exact number of members in each team
 - `solution_count`: Total number of distinct optimal solutions with the same minimum `rating_diff`
-- `min_team_rating`: Lowest team total rating
-- `max_team_rating`: Highest team total rating
-- `rating_diff`: Difference between max and min (0 = perfect balance)
+- `min_team_rating`: Lowest team rating summary
+- `max_team_rating`: Highest team rating summary
+- `rating_diff`: Difference between max and min summaries (0 = perfect balance)
+
+When input uses `rating` lists with `n` values, each meta rating field becomes a list with `n+1` values:
+`[criterion_1, criterion_2, ..., criterion_n, total]`.
+The last value is the same "total" metric used for optimization and team balancing.
+For single-value ratings, these fields stay as scalars for backward compatibility.
 
 ## Usage
 
@@ -109,8 +118,8 @@ import "team_sorter/pkg/teamsorter"
 req := teamsorter.SortTeamsRequest{
   NumberOfTeams: 3,
   Participants: []teamsorter.Participant{
-    {Name: "Alice", Rating: 9.5},
-    {Name: "Bob", Rating: 8.0},
+    {Name: "Alice", Ratings: []teamsorter.Rating{9.5, 8.0, 7.5}},
+    {Name: "Bob", Ratings: []teamsorter.Rating{8.0, 8.5, 7.0}},
   },
 }
 
@@ -152,6 +161,15 @@ go run ./cmd/demo
 - `-d '<json>'`: Pass JSON as command-line string
 - `-f <file>`: Read JSON from file
 - `-o <file>`: Write JSON output to file (default: stdout)
+- `-all-name-solutions`: Output all optimal solutions as list items in the form `{ "Team N": ["Name", ...] }`
+
+Example:
+
+```bash
+./bin/sorter -f input.json -all-name-solutions | jq .
+```
+
+If `solution_count` is `24`, this mode returns a JSON array with `24` objects.
 
 ## Example
 
@@ -204,6 +222,7 @@ Common errors:
 - `"participants must not be empty"`
 - `"participants count must be at least number_of_teams + 1"`
 - `"participant rating must be between 1.0 and 10.0"`
+- `"all participants must have the same number of rating values"`
 - `"participant name must be unique"`
 - `"no team sorting solution found"`
 
@@ -230,4 +249,3 @@ go test ./...
 ## License
 
 See LICENSE file.
-

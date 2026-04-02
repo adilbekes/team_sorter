@@ -27,9 +27,13 @@ func ValidateSortTeamsRequest(req SortTeamsRequest) error {
 	// Check rating consistency: all have ratings or none have ratings
 	hasRating := false
 	hasNoRating := false
+	expectedRatingCount := 0
 	for _, participant := range req.Participants {
-		if participant.Rating != nil {
+		if participant.HasRating() {
 			hasRating = true
+			if expectedRatingCount == 0 {
+				expectedRatingCount = participant.RatingCount()
+			}
 		} else {
 			hasNoRating = true
 		}
@@ -44,15 +48,19 @@ func ValidateSortTeamsRequest(req SortTeamsRequest) error {
 			return ErrEmptyParticipantName
 		}
 
-		// Only validate rating if provided
-		if participant.Rating != nil {
-			if math.IsNaN(participant.Rating.Float64()) || math.IsInf(participant.Rating.Float64(), 0) {
-				return ErrInvalidParticipantRating
+		if participant.HasRating() {
+			if participant.RatingCount() != expectedRatingCount {
+				return ErrInconsistentRatingCount
 			}
 
-			rating := participant.Rating.Float64()
-			if rating < 1.0 || rating > 10.0 {
-				return ErrInvalidParticipantRating
+			for _, value := range participant.Ratings {
+				rating := value.Float64()
+				if math.IsNaN(rating) || math.IsInf(rating, 0) {
+					return ErrInvalidParticipantRating
+				}
+				if rating < 1.0 || rating > 10.0 {
+					return ErrInvalidParticipantRating
+				}
 			}
 		}
 

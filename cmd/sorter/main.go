@@ -66,6 +66,7 @@ func main() {
 	dataFlag := flag.String("d", "", "JSON request string")
 	fileFlag := flag.String("f", "", "JSON request file")
 	outputFlag := flag.String("o", "", "JSON output file (if not set, output to stdout)")
+	allNameSolutionsFlag := flag.Bool("all-name-solutions", false, "output all optimal solutions as [{\"Team N\": [\"Name\", ...]}, ...]")
 	flag.Parse()
 
 	var inputData io.Reader
@@ -96,10 +97,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	result, err := teamsorter.SortTeams(req)
-	if err != nil {
-		reportError(err.Error(), *outputFlag)
-		os.Exit(1)
+	var payload interface{}
+	if *allNameSolutionsFlag {
+		solutions, err := teamsorter.ListOptimalNameSolutions(req)
+		if err != nil {
+			reportError(err.Error(), *outputFlag)
+			os.Exit(1)
+		}
+		payload = solutions
+	} else {
+		result, err := teamsorter.SortTeams(req)
+		if err != nil {
+			reportError(err.Error(), *outputFlag)
+			os.Exit(1)
+		}
+		payload = result
 	}
 
 	// Write output
@@ -111,12 +123,12 @@ func main() {
 		}
 		defer file.Close()
 
-		if err := json.NewEncoder(file).Encode(result); err != nil {
+		if err := json.NewEncoder(file).Encode(payload); err != nil {
 			reportError(fmt.Sprintf("failed to encode result: %s", err), *outputFlag)
 			os.Exit(1)
 		}
 	} else {
-		if err := json.NewEncoder(os.Stdout).Encode(result); err != nil {
+		if err := json.NewEncoder(os.Stdout).Encode(payload); err != nil {
 			writeErrorToStderr(fmt.Sprintf("failed to encode result: %s", err))
 			os.Exit(1)
 		}

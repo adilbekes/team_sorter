@@ -10,6 +10,7 @@ var (
 	ErrEmptyParticipantName     = errors.New("participant name must not be empty")
 	ErrInvalidParticipantRating = errors.New("participant rating must be between 1.0 and 10.0")
 	ErrInconsistentRatings      = errors.New("all participants must have ratings or all must have no ratings")
+	ErrInconsistentRatingCount  = errors.New("all participants must have the same number of rating values")
 	ErrDuplicateParticipantName = errors.New("participant name must be unique")
 	ErrNoSolution               = errors.New("no team sorting solution found")
 )
