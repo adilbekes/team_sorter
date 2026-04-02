@@ -59,7 +59,7 @@ The sorter uses **exact backtracking with pruning** to guarantee the globally op
   - `name` (string): Unique participant identifier
   - `rating` (number or number[]): Skill/strength rating value(s) in range [1.0, 10.0]
     - Number keeps single-rating behavior
-    - List enables multi-criteria input; balancing uses the participant's average rating
+    - List enables multi-criteria balancing: teams are optimized to balance each criterion spread (e.g., attack/mid/defense) and average team rating spread
 
 ## Output Format
 
@@ -105,8 +105,8 @@ The sorter uses **exact backtracking with pruning** to guarantee the globally op
 - `rating_diff`: Difference between max and min summaries (0 = perfect balance)
 
 When input uses `rating` lists with `n` values, each meta rating field becomes a list with `n+1` values:
-`[criterion_1, criterion_2, ..., criterion_n, total]`.
-The last value is the same "total" metric used for optimization and team balancing.
+`[criterion_1, criterion_2, ..., criterion_n, avg]`.
+The last value is the participant's average rating across all criteria, used for optimization and team balancing.
 For single-value ratings, these fields stay as scalars for backward compatibility.
 
 ## Usage

@@ -380,10 +380,10 @@ func fillTeamsOptimally(participants []Participant, teams []Team, capacities []i
 }
 
 type optimizationObjective struct {
-	MaxDiff   Rating
-	TotalDiff Rating
-	SumDiff   Rating
-	Diffs     []Rating
+	MaxDiff Rating
+	AvgDiff Rating
+	SumDiff Rating
+	Diffs   []Rating
 }
 
 func computeOptimizationObjective(teams []Team) optimizationObjective {
@@ -403,7 +403,7 @@ func computeOptimizationObjective(teams []Team) optimizationObjective {
 	}
 
 	obj.MaxDiff = normalizeRating(maxDiff.Float64())
-	obj.TotalDiff = normalizeRating(diffs[len(diffs)-1].Float64())
+	obj.AvgDiff = normalizeRating(diffs[len(diffs)-1].Float64())
 	obj.SumDiff = normalizeRating(sum)
 	return obj
 }
@@ -437,7 +437,7 @@ func optimizationDiffs(teams []Team) []Rating {
 		diffs[i] = normalizeRating(maxValues[i].Float64() - minValues[i].Float64())
 	}
 
-	// Single-rating case has [criterion,total] where criterion == total; optimize by total only.
+	// Single-rating case has [criterion,avg] where criterion == avg; optimize by avg only.
 	if metricCount == 2 {
 		return []Rating{diffs[1]}
 	}
@@ -453,10 +453,10 @@ func objectiveBetter(a optimizationObjective, b optimizationObjective, eps float
 		return false
 	}
 
-	if float64(a.TotalDiff) < float64(b.TotalDiff)-eps {
+	if float64(a.AvgDiff) < float64(b.AvgDiff)-eps {
 		return true
 	}
-	if math.Abs(float64(a.TotalDiff-b.TotalDiff)) > eps {
+	if math.Abs(float64(a.AvgDiff-b.AvgDiff)) > eps {
 		return false
 	}
 
@@ -489,7 +489,7 @@ func objectiveEqual(a optimizationObjective, b optimizationObjective, eps float6
 	if math.Abs(float64(a.MaxDiff-b.MaxDiff)) > eps {
 		return false
 	}
-	if math.Abs(float64(a.TotalDiff-b.TotalDiff)) > eps {
+	if math.Abs(float64(a.AvgDiff-b.AvgDiff)) > eps {
 		return false
 	}
 	if math.Abs(float64(a.SumDiff-b.SumDiff)) > eps {
