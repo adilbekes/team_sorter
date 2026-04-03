@@ -3,6 +3,9 @@ package teamsorter
 import (
 	"encoding/json"
 	"errors"
+	"math"
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -421,5 +424,230 @@ func TestListOptimalNameSolutions_NoRatings_ReturnsAllPermutations(t *testing.T)
 	if got, want := len(solutions), 6; got != want {
 		t.Fatalf("solution length = %d, want %d", got, want)
 	}
+}
+
+func TestSortTeams_RejectsTooManyTeams(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 4,
+		Participants: []Participant{
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "Mira", Ratings: oneRating(9.0)},
+			{Name: "Bek", Ratings: oneRating(8.0)},
+		},
+	}
+
+	_, err := SortTeams(req)
+	if !errors.Is(err, ErrTooManyTeams) {
+		t.Fatalf("SortTeams() error = %v, want %v", err, ErrTooManyTeams)
+	}
+}
+
+func TestSortTeams_RejectsMixedRatingPresence(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 2,
+		Participants: []Participant{
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "Mira"},
+			{Name: "Bek", Ratings: oneRating(8.0)},
+		},
+	}
+
+	_, err := SortTeams(req)
+	if !errors.Is(err, ErrInconsistentRatings) {
+		t.Fatalf("SortTeams() error = %v, want %v", err, ErrInconsistentRatings)
+	}
+}
+
+func TestSortTeams_RejectsDuplicateNamesCaseInsensitive(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 2,
+		Participants: []Participant{
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "ali", Ratings: oneRating(9.0)},
+			{Name: "Bek", Ratings: oneRating(8.0)},
+		},
+	}
+
+	_, err := SortTeams(req)
+	if !errors.Is(err, ErrDuplicateParticipantName) {
+		t.Fatalf("SortTeams() error = %v, want %v", err, ErrDuplicateParticipantName)
+	}
+}
+
+func TestSortTeams_RejectsEmptyParticipantNameAfterTrim(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 2,
+		Participants: []Participant{
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "   ", Ratings: oneRating(9.0)},
+			{Name: "Bek", Ratings: oneRating(8.0)},
+		},
+	}
+
+	_, err := SortTeams(req)
+	if !errors.Is(err, ErrEmptyParticipantName) {
+		t.Fatalf("SortTeams() error = %v, want %v", err, ErrEmptyParticipantName)
+	}
+}
+
+func TestSortTeams_RejectsInvalidParticipantRatingValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		rating Rating
+	}{
+		{name: "below minimum", rating: Rating(0.9)},
+		{name: "above maximum", rating: Rating(10.1)},
+		{name: "nan", rating: Rating(math.NaN())},
+		{name: "positive infinity", rating: Rating(math.Inf(1))},
+		{name: "negative infinity", rating: Rating(math.Inf(-1))},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := SortTeamsRequest{
+				NumberOfTeams: 2,
+				Participants: []Participant{
+					{Name: "Ali", Ratings: []Rating{10.0}},
+					{Name: "Mira", Ratings: []Rating{tc.rating}},
+					{Name: "Bek", Ratings: []Rating{8.0}},
+				},
+			}
+
+			_, err := SortTeams(req)
+			if !errors.Is(err, ErrInvalidParticipantRating) {
+				t.Fatalf("SortTeams() error = %v, want %v", err, ErrInvalidParticipantRating)
+			}
+		})
+	}
+}
+
+func TestSortTeams_AddsMultiRatingPlaceholderUsingPerDimensionMedian(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 3,
+		Participants: []Participant{
+			{Name: "A", Ratings: []Rating{10.0, 2.0}},
+			{Name: "B", Ratings: []Rating{8.0, 4.0}},
+			{Name: "C", Ratings: []Rating{6.0, 6.0}},
+			{Name: "D", Ratings: []Rating{4.0, 8.0}},
+			{Name: "E", Ratings: []Rating{2.0, 10.0}},
+		},
+	}
+
+	resp, err := SortTeams(req)
+	if err != nil {
+		t.Fatalf("SortTeams() error = %v", err)
+	}
+
+	if got, want := resp.Meta.PlaceholderCount, 1; got != want {
+		t.Fatalf("placeholder_count = %d, want %d", got, want)
+	}
+
+	placeholderFound := false
+	for _, team := range resp.Teams {
+		if got, want := len(team.Members), 2; got != want {
+			t.Fatalf("team size = %d, want %d", got, want)
+		}
+		for _, member := range team.Members {
+			if !member.IsPlaceholder {
+				continue
+			}
+			placeholderFound = true
+			if got, want := len(member.Ratings), 2; got != want {
+				t.Fatalf("placeholder rating length = %d, want %d", got, want)
+			}
+			if got, want := member.Ratings[0], Rating(6.0); got != want {
+				t.Fatalf("placeholder rating[0] = %.1f, want %.1f", got, want)
+			}
+			if got, want := member.Ratings[1], Rating(6.0); got != want {
+				t.Fatalf("placeholder rating[1] = %.1f, want %.1f", got, want)
+			}
+		}
+	}
+
+	if !placeholderFound {
+		t.Fatalf("expected exactly one placeholder in output")
+	}
+}
+
+func TestSortTeams_SolutionCountMatchesListOptimalNameSolutionsForRatedInput(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 3,
+		Participants: []Participant{
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "Mira", Ratings: oneRating(10.0)},
+			{Name: "Bek", Ratings: oneRating(10.0)},
+			{Name: "Dana", Ratings: oneRating(9.0)},
+		},
+	}
+
+	resp, err := SortTeams(req)
+	if err != nil {
+		t.Fatalf("SortTeams() error = %v", err)
+	}
+
+	solutions, err := ListOptimalNameSolutions(req)
+	if err != nil {
+		t.Fatalf("ListOptimalNameSolutions() error = %v", err)
+	}
+
+	if got, want := resp.Meta.SolutionCount, len(solutions); got != want {
+		t.Fatalf("solution_count = %d, want %d", got, want)
+	}
+}
+
+func TestSortTeams_SelectedSolutionIsOneOfOptimalNameSolutions(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 3,
+		Participants: []Participant{
+			{Name: "Ali", Ratings: oneRating(10.0)},
+			{Name: "Mira", Ratings: oneRating(10.0)},
+			{Name: "Bek", Ratings: oneRating(10.0)},
+			{Name: "Dana", Ratings: oneRating(9.0)},
+		},
+	}
+
+	resp, err := SortTeams(req)
+	if err != nil {
+		t.Fatalf("SortTeams() error = %v", err)
+	}
+
+	solutions, err := ListOptimalNameSolutions(req)
+	if err != nil {
+		t.Fatalf("ListOptimalNameSolutions() error = %v", err)
+	}
+
+	selected := canonicalSolutionFromTeams(resp.Teams)
+	for _, solution := range solutions {
+		if selected == canonicalSolutionFromNameMap(solution) {
+			return
+		}
+	}
+
+	t.Fatalf("selected SortTeams solution was not found in optimal name-only solutions")
+}
+
+func canonicalSolutionFromTeams(teams []Team) string {
+	parts := make([]string, 0, len(teams))
+	for _, team := range teams {
+		names := make([]string, 0, len(team.Members))
+		for _, member := range team.Members {
+			names = append(names, member.Name)
+		}
+		sort.Strings(names)
+		parts = append(parts, team.Name+":"+strings.Join(names, ","))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "|")
+}
+
+func canonicalSolutionFromNameMap(solution map[string][]string) string {
+	parts := make([]string, 0, len(solution))
+	for teamName, members := range solution {
+		names := append([]string(nil), members...)
+		sort.Strings(names)
+		parts = append(parts, teamName+":"+strings.Join(names, ","))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "|")
 }
 
