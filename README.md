@@ -4,11 +4,11 @@ Team Sorter divides participants into balanced teams based on ratings, achieving
 
 ## Features
 
-- **Optimal balancing**: Uses exact branch-and-bound backtracking algorithm to find the global minimum rating difference across teams
+- **Optimal balancing**: Uses exact branch-and-bound backtracking algorithm to find the global minimum rating difference across teams (when ratings are provided)
 - **Flexible ratings**: Supports participant `rating` as either a decimal or a list of decimals (1.0 to 10.0) with one-decimal precision
 - **Placeholder padding**: Automatically adds median-rated placeholder participants when participant count is not divisible by team count
 - **Equal team sizes**: Maintains equal team sizes; each team must have at least 1 real (non-placeholder) participant
-- **Solution enumeration**: Counts all optimal solutions and randomly selects one per run via reservoir sampling
+- **Solution enumeration**: Counts all optimal solutions and randomly selects one per run via reservoir sampling for rated input; unrated input uses direct random assignment
 - **JSON API**: Language-agnostic interface via JSON stdin/stdout or files
 - **CLI & Library**: Available as both a standalone binary and importable Go package
 
@@ -28,7 +28,12 @@ Input must satisfy:
 
 ## Algorithm
 
-The sorter uses **exact backtracking with pruning** to guarantee the globally optimal solution:
+The sorter has two execution modes:
+
+- **Rated input**: uses exact backtracking with pruning to guarantee the globally optimal solution
+- **Unrated input**: uses a per-call randomizer to produce balanced team sizes without synthetic ratings
+
+Rated mode flow:
 
 1. **Padding**: If `participants % teams != 0`, adds `(teams - remainder)` placeholder participants with the median rating of real participants
 2. **Optimal assignment**: Explores all valid assignments respecting:
@@ -38,6 +43,11 @@ The sorter uses **exact backtracking with pruning** to guarantee the globally op
    - Multi-rating objective: balances per-criterion team spreads (e.g., attack/mid/defense) and total team spread together
 3. **Solution counting**: Tracks all distinct assignments that achieve the minimum `rating_diff`
 4. **Random selection**: Uses reservoir sampling to randomly pick one among all optimal solutions
+
+Unrated mode flow:
+
+1. **Padding**: If `participants % teams != 0`, adds placeholders (without ratings)
+2. **Random assignment**: Randomly shuffles/assigns participants into valid equal-size teams
 
 ## Input Format
 
@@ -170,7 +180,8 @@ Example:
 ./bin/sorter -f input.json -list | jq .
 ```
 
-If `solution_count` is `24`, this mode returns a JSON array with `24` objects.
+If ratings are provided and `solution_count` is `24`, this mode returns a JSON array with `24` objects.
+If ratings are not provided, this mode returns all valid team permutations (can be very large).
 
 ## Example
 

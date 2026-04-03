@@ -312,3 +312,114 @@ func TestSortTeams_AllowsNamesThatAreNotPlaceholderIntPattern(t *testing.T) {
 		t.Fatalf("SortTeams() unexpected error = %v", err)
 	}
 }
+
+func TestSortTeams_NoRatings_AssignsTeamsAndOmitsRatingFields(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 2,
+		Participants: []Participant{
+			{Name: "Ali"},
+			{Name: "Mira"},
+			{Name: "Bek"},
+			{Name: "Dana"},
+			{Name: "Nurlan"},
+		},
+	}
+
+	resp, err := SortTeams(req)
+	if err != nil {
+		t.Fatalf("SortTeams() error = %v", err)
+	}
+
+	if resp.HasRatings {
+		t.Fatalf("HasRatings = true, want false")
+	}
+	if got, want := resp.Meta.PlaceholderCount, 1; got != want {
+		t.Fatalf("placeholder_count = %d, want %d", got, want)
+	}
+	if got, want := resp.Meta.MembersPerTeam, 3; got != want {
+		t.Fatalf("members_per_team = %d, want %d", got, want)
+	}
+	if got, want := resp.Meta.SolutionCount, 1; got != want {
+		t.Fatalf("solution_count = %d, want %d", got, want)
+	}
+
+	seenRealNames := make(map[string]struct{}, len(req.Participants))
+	for _, team := range resp.Teams {
+		if got, want := len(team.Members), 3; got != want {
+			t.Fatalf("team size = %d, want %d", got, want)
+		}
+		for _, member := range team.Members {
+			if len(member.Ratings) != 0 {
+				t.Fatalf("member %q has unexpected ratings: %v", member.Name, member.Ratings)
+			}
+			if member.IsPlaceholder {
+				continue
+			}
+			if _, exists := seenRealNames[member.Name]; exists {
+				t.Fatalf("real participant %q appears more than once", member.Name)
+			}
+			seenRealNames[member.Name] = struct{}{}
+		}
+	}
+	if got, want := len(seenRealNames), len(req.Participants); got != want {
+		t.Fatalf("real participant assignments = %d, want %d", got, want)
+	}
+
+	bytes, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(bytes, &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+
+	teamsAny := payload["teams"].([]any)
+	for _, item := range teamsAny {
+		team := item.(map[string]any)
+		if _, ok := team["total_rating"]; ok {
+			t.Fatalf("total_rating must be omitted when input has no ratings")
+		}
+		members := team["members"].([]any)
+		for _, m := range members {
+			member := m.(map[string]any)
+			if _, ok := member["rating"]; ok {
+				t.Fatalf("member rating must be omitted when input has no ratings")
+			}
+		}
+	}
+
+	meta := payload["meta"].(map[string]any)
+	if _, ok := meta["min_team_rating"]; ok {
+		t.Fatalf("min_team_rating must be omitted when input has no ratings")
+	}
+	if _, ok := meta["max_team_rating"]; ok {
+		t.Fatalf("max_team_rating must be omitted when input has no ratings")
+	}
+	if _, ok := meta["rating_diff"]; ok {
+		t.Fatalf("rating_diff must be omitted when input has no ratings")
+	}
+}
+
+func TestListOptimalNameSolutions_NoRatings_ReturnsAllPermutations(t *testing.T) {
+	req := SortTeamsRequest{
+		NumberOfTeams: 2,
+		Participants: []Participant{
+			{Name: "Ali"},
+			{Name: "Mira"},
+			{Name: "Bek"},
+			{Name: "Dana"},
+		},
+	}
+
+	solutions, err := ListOptimalNameSolutions(req)
+	if err != nil {
+		t.Fatalf("ListOptimalNameSolutions() error = %v", err)
+	}
+
+	if got, want := len(solutions), 6; got != want {
+		t.Fatalf("solution length = %d, want %d", got, want)
+	}
+}
+

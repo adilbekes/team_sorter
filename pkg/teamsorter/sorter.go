@@ -22,20 +22,7 @@ func SortTeams(req SortTeamsRequest) (*SortTeamsResponse, error) {
 	participants := make([]Participant, len(req.Participants))
 	copy(participants, req.Participants)
 
-	// Assign random ratings if none are provided
-	hasAnyRating := false
-	for _, p := range participants {
-		if p.HasRating() {
-			hasAnyRating = true
-			break
-		}
-	}
-	if !hasAnyRating {
-		for i := range participants {
-			rating := normalizeRating(rng.Float64()*9.0 + 1.0) // [1.0, 10.0]
-			participants[i].Ratings = []Rating{rating}
-		}
-	}
+	hasAnyRating := hasAnyRatings(participants)
 
 	participants = withMedianPlaceholders(participants, req.NumberOfTeams)
 	placeholderCount := len(participants) - len(req.Participants)
@@ -43,6 +30,21 @@ func SortTeams(req SortTeamsRequest) (*SortTeamsResponse, error) {
 	placeholderCap := 0
 	if placeholderCount > 0 {
 		placeholderCap = (placeholderCount + req.NumberOfTeams - 1) / req.NumberOfTeams
+	}
+
+	teams, capacities := initializeTeams(len(participants), req.NumberOfTeams)
+
+	if !hasAnyRating {
+		if ok := fillTeamsRandomlyUnrated(participants, teams, capacities, placeholderCap, rng); !ok {
+			return nil, ErrNoSolution
+		}
+
+		meta := buildSortTeamsMeta(teams, len(req.Participants), placeholderCount, 1)
+		return &SortTeamsResponse{
+			Teams:      teams,
+			Meta:       meta,
+			HasRatings: false,
+		}, nil
 	}
 
 	sort.SliceStable(participants, func(i, j int) bool {
@@ -55,25 +57,6 @@ func SortTeams(req SortTeamsRequest) (*SortTeamsResponse, error) {
 		return strings.ToLower(strings.TrimSpace(participants[i].Name)) <
 			strings.ToLower(strings.TrimSpace(participants[j].Name))
 	})
-
-	teams := make([]Team, req.NumberOfTeams)
-	baseSize := len(participants) / req.NumberOfTeams
-	extraSlots := len(participants) % req.NumberOfTeams
-	capacities := make([]int, req.NumberOfTeams)
-
-	for i := range teams {
-		capacity := baseSize
-		if i < extraSlots {
-			capacity++
-		}
-		capacities[i] = capacity
-
-		teams[i] = Team{
-			Name:        fmt.Sprintf("Team %d", i+1),
-			TotalRating: 0,
-			Members:     make([]Participant, 0, capacity),
-		}
-	}
 
 	found, solutionCount, _ := fillTeamsOptimally(participants, teams, capacities, placeholderCap, rng, false)
 	if !found {
@@ -100,20 +83,7 @@ func ListOptimalNameSolutions(req SortTeamsRequest) ([]map[string][]string, erro
 
 	participants := make([]Participant, len(req.Participants))
 	copy(participants, req.Participants)
-
-	hasAnyRating := false
-	for _, p := range participants {
-		if p.HasRating() {
-			hasAnyRating = true
-			break
-		}
-	}
-	if !hasAnyRating {
-		for i := range participants {
-			rating := normalizeRating(rng.Float64()*9.0 + 1.0) // [1.0, 10.0]
-			participants[i].Ratings = []Rating{rating}
-		}
-	}
+	hasAnyRating := hasAnyRatings(participants)
 
 	participants = withMedianPlaceholders(participants, req.NumberOfTeams)
 	placeholderCount := len(participants) - len(req.Participants)
@@ -121,6 +91,10 @@ func ListOptimalNameSolutions(req SortTeamsRequest) ([]map[string][]string, erro
 	placeholderCap := 0
 	if placeholderCount > 0 {
 		placeholderCap = (placeholderCount + req.NumberOfTeams - 1) / req.NumberOfTeams
+	}
+
+	if !hasAnyRating {
+		return listAllNameSolutionsUnrated(participants, req.NumberOfTeams, placeholderCap), nil
 	}
 
 	sort.SliceStable(participants, func(i, j int) bool {
@@ -134,24 +108,7 @@ func ListOptimalNameSolutions(req SortTeamsRequest) ([]map[string][]string, erro
 			strings.ToLower(strings.TrimSpace(participants[j].Name))
 	})
 
-	teams := make([]Team, req.NumberOfTeams)
-	baseSize := len(participants) / req.NumberOfTeams
-	extraSlots := len(participants) % req.NumberOfTeams
-	capacities := make([]int, req.NumberOfTeams)
-
-	for i := range teams {
-		capacity := baseSize
-		if i < extraSlots {
-			capacity++
-		}
-		capacities[i] = capacity
-
-		teams[i] = Team{
-			Name:        fmt.Sprintf("Team %d", i+1),
-			TotalRating: 0,
-			Members:     make([]Participant, 0, capacity),
-		}
-	}
+	teams, capacities := initializeTeams(len(participants), req.NumberOfTeams)
 
 	found, _, allSolutions := fillTeamsOptimally(participants, teams, capacities, placeholderCap, rng, true)
 	if !found {
@@ -175,6 +132,184 @@ func ListOptimalNameSolutions(req SortTeamsRequest) ([]map[string][]string, erro
 	}
 
 	return result, nil
+}
+
+func hasAnyRatings(participants []Participant) bool {
+	for _, participant := range participants {
+		if participant.HasRating() {
+			return true
+		}
+	}
+	return false
+}
+
+func initializeTeams(participantCount int, teamCount int) ([]Team, []int) {
+	teams := make([]Team, teamCount)
+	baseSize := participantCount / teamCount
+	extraSlots := participantCount % teamCount
+	capacities := make([]int, teamCount)
+
+	for i := range teams {
+		capacity := baseSize
+		if i < extraSlots {
+			capacity++
+		}
+		capacities[i] = capacity
+
+		teams[i] = Team{
+			Name:        fmt.Sprintf("Team %d", i+1),
+			TotalRating: 0,
+			Members:     make([]Participant, 0, capacity),
+		}
+	}
+
+	return teams, capacities
+}
+
+func fillTeamsRandomlyUnrated(participants []Participant, teams []Team, capacities []int, placeholderCap int, rng *rand.Rand) bool {
+	realParticipants := make([]Participant, 0, len(participants))
+	placeholders := make([]Participant, 0, len(participants))
+	for _, participant := range participants {
+		if participant.IsPlaceholder {
+			placeholders = append(placeholders, participant)
+		} else {
+			realParticipants = append(realParticipants, participant)
+		}
+	}
+
+	if len(realParticipants) < len(teams) {
+		return false
+	}
+
+	rng.Shuffle(len(realParticipants), func(i, j int) {
+		realParticipants[i], realParticipants[j] = realParticipants[j], realParticipants[i]
+	})
+	rng.Shuffle(len(placeholders), func(i, j int) {
+		placeholders[i], placeholders[j] = placeholders[j], placeholders[i]
+	})
+
+	teamOrder := rng.Perm(len(teams))
+	teamPlaceholders := make([]int, len(teams))
+	teamSizes := make([]int, len(teams))
+
+	for i := 0; i < len(teams); i++ {
+		teamIdx := teamOrder[i]
+		participant := realParticipants[i]
+		teams[teamIdx].Members = append(teams[teamIdx].Members, participant)
+		teams[teamIdx].TotalRating = normalizeRating(float64(teams[teamIdx].TotalRating + participant.Score()))
+		teamSizes[teamIdx]++
+	}
+
+	remaining := append([]Participant(nil), realParticipants[len(teams):]...)
+	remaining = append(remaining, placeholders...)
+	rng.Shuffle(len(remaining), func(i, j int) {
+		remaining[i], remaining[j] = remaining[j], remaining[i]
+	})
+
+	for _, participant := range remaining {
+		candidates := make([]int, 0, len(teams))
+		for i := range teams {
+			if teamSizes[i] >= capacities[i] {
+				continue
+			}
+			if participant.IsPlaceholder && placeholderCap > 0 && teamPlaceholders[i] >= placeholderCap {
+				continue
+			}
+			candidates = append(candidates, i)
+		}
+
+		if len(candidates) == 0 {
+			return false
+		}
+
+		teamIdx := candidates[rng.Intn(len(candidates))]
+		teams[teamIdx].Members = append(teams[teamIdx].Members, participant)
+		teams[teamIdx].TotalRating = normalizeRating(float64(teams[teamIdx].TotalRating + participant.Score()))
+		teamSizes[teamIdx]++
+		if participant.IsPlaceholder {
+			teamPlaceholders[teamIdx]++
+		}
+	}
+
+	for i := range teams {
+		if teamSizes[i] != capacities[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func listAllNameSolutionsUnrated(participants []Participant, teamCount int, placeholderCap int) []map[string][]string {
+	sortedParticipants := append([]Participant(nil), participants...)
+	sort.SliceStable(sortedParticipants, func(i, j int) bool {
+		return strings.ToLower(strings.TrimSpace(sortedParticipants[i].Name)) <
+			strings.ToLower(strings.TrimSpace(sortedParticipants[j].Name))
+	})
+
+	teams, capacities := initializeTeams(len(sortedParticipants), teamCount)
+	teamPlaceholders := make([]int, len(teams))
+	teamRealMembers := make([]int, len(teams))
+
+	hasAtLeastOneRealMember := func() bool {
+		for i := range teams {
+			if teamRealMembers[i] == 0 {
+				return false
+			}
+		}
+		return true
+	}
+
+	results := make([]map[string][]string, 0)
+
+	var search func(index int)
+	search = func(index int) {
+		if index == len(sortedParticipants) {
+			if !hasAtLeastOneRealMember() {
+				return
+			}
+
+			solution := make(map[string][]string, len(teams))
+			for _, team := range teams {
+				names := make([]string, len(team.Members))
+				for i, member := range team.Members {
+					names[i] = member.Name
+				}
+				solution[team.Name] = names
+			}
+			results = append(results, solution)
+			return
+		}
+
+		participant := sortedParticipants[index]
+		for i := range teams {
+			if len(teams[i].Members) >= capacities[i] {
+				continue
+			}
+			if participant.IsPlaceholder && placeholderCap > 0 && teamPlaceholders[i] >= placeholderCap {
+				continue
+			}
+
+			teams[i].Members = append(teams[i].Members, participant)
+			if participant.IsPlaceholder {
+				teamPlaceholders[i]++
+			} else {
+				teamRealMembers[i]++
+			}
+
+			search(index + 1)
+
+			teams[i].Members = teams[i].Members[:len(teams[i].Members)-1]
+			if participant.IsPlaceholder {
+				teamPlaceholders[i]--
+			} else {
+				teamRealMembers[i]--
+			}
+		}
+	}
+
+	search(0)
+	return results
 }
 
 func randomSeed() int64 {
