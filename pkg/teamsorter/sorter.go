@@ -39,7 +39,11 @@ func SortTeams(req SortTeamsRequest) (*SortTeamsResponse, error) {
 			return nil, ErrNoSolution
 		}
 
-		meta := buildSortTeamsMeta(teams, len(req.Participants), placeholderCount, 1)
+		// Count all distinct solutions for unrated input (deduplicate team ordering)
+		allSolutions := listAllNameSolutionsUnrated(participants, req.NumberOfTeams, placeholderCap)
+		solutionCount := countUnorderedDistinctSolutions(allSolutions)
+
+		meta := buildSortTeamsMeta(teams, len(req.Participants), placeholderCount, solutionCount)
 		return &SortTeamsResponse{
 			Teams:      teams,
 			Meta:       meta,
@@ -94,7 +98,9 @@ func ListOptimalNameSolutions(req SortTeamsRequest) ([]map[string][]string, erro
 	}
 
 	if !hasAnyRating {
-		return listAllNameSolutionsUnrated(participants, req.NumberOfTeams, placeholderCap), nil
+		allSolutions := listAllNameSolutionsUnrated(participants, req.NumberOfTeams, placeholderCap)
+		// Deduplicate solutions that represent the same unordered partition
+		return deduplicateNameSolutions(allSolutions), nil
 	}
 
 	sort.SliceStable(participants, func(i, j int) bool {
@@ -310,6 +316,98 @@ func listAllNameSolutionsUnrated(participants []Participant, teamCount int, plac
 
 	search(0)
 	return results
+}
+
+// countUnorderedDistinctSolutions deduplicates solutions that represent the same partition
+// (i.e., differ only by team ordering). For example, {Team1: [A, B], Team2: [C, D]} is
+// the same partition as {Team1: [C, D], Team2: [A, B]}.
+func countUnorderedDistinctSolutions(solutions []map[string][]string) int {
+	if len(solutions) == 0 {
+		return 0
+	}
+
+	// Convert each solution to a canonical unordered form (sorted sets)
+	seen := make(map[string]struct{})
+	for _, solution := range solutions {
+		// Build a canonical representation of this partition
+		var memberSets [][]string
+		for _, members := range solution {
+			// Sort members within each team
+			sorted := append([]string(nil), members...)
+			sort.Strings(sorted)
+			memberSets = append(memberSets, sorted)
+		}
+		// Sort team sets to make ordering independent
+		sort.Slice(memberSets, func(i, j int) bool {
+			if len(memberSets[i]) != len(memberSets[j]) {
+				return len(memberSets[i]) < len(memberSets[j])
+			}
+			for k := range memberSets[i] {
+				if memberSets[i][k] != memberSets[j][k] {
+					return memberSets[i][k] < memberSets[j][k]
+				}
+			}
+			return false
+		})
+		// Create signature
+		var sig strings.Builder
+		for i, set := range memberSets {
+			if i > 0 {
+				sig.WriteString("|")
+			}
+			sig.WriteString(strings.Join(set, ","))
+		}
+		seen[sig.String()] = struct{}{}
+	}
+	return len(seen)
+}
+
+// deduplicateNameSolutions removes solutions that represent the same unordered partition
+// (i.e., differ only by team ordering).
+func deduplicateNameSolutions(solutions []map[string][]string) []map[string][]string {
+	if len(solutions) == 0 {
+		return solutions
+	}
+
+	seen := make(map[string]struct{})
+	var result []map[string][]string
+
+	for _, solution := range solutions {
+		// Build a canonical representation of this partition
+		var memberSets [][]string
+		for _, members := range solution {
+			// Sort members within each team
+			sorted := append([]string(nil), members...)
+			sort.Strings(sorted)
+			memberSets = append(memberSets, sorted)
+		}
+		// Sort team sets to make ordering independent
+		sort.Slice(memberSets, func(i, j int) bool {
+			if len(memberSets[i]) != len(memberSets[j]) {
+				return len(memberSets[i]) < len(memberSets[j])
+			}
+			for k := range memberSets[i] {
+				if memberSets[i][k] != memberSets[j][k] {
+					return memberSets[i][k] < memberSets[j][k]
+				}
+			}
+			return false
+		})
+		// Create signature
+		var sig strings.Builder
+		for i, set := range memberSets {
+			if i > 0 {
+				sig.WriteString("|")
+			}
+			sig.WriteString(strings.Join(set, ","))
+		}
+		signature := sig.String()
+		if _, exists := seen[signature]; !exists {
+			seen[signature] = struct{}{}
+			result = append(result, solution)
+		}
+	}
+	return result
 }
 
 func randomSeed() int64 {
